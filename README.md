@@ -75,6 +75,27 @@ This repo demonstrates:
 - Concurrent enrichment for performance
 - Defensive data persistence on failure
 
+## Naming Strategy For Multiple Scrapers
+
+Use a neutral public naming template and keep the real store mapping private.
+
+Public repo template:
+- `retail-catalog-scraper-<segment>-<alias>`
+
+Examples:
+- `retail-catalog-scraper-electronics-r01`
+- `retail-catalog-scraper-supermarket-r02`
+- `retail-catalog-scraper-fashion-r03`
+- `retail-catalog-scraper-home-r04`
+- `retail-catalog-scraper-pharmacy-r05`
+
+Private mapping idea (not in GitHub):
+- `r01 -> <real store A>`
+- `r02 -> <real store B>`
+- `r03 -> <real store C>`
+- `r04 -> <real store D>`
+- `r05 -> <real store E>`
+
 ## Ethical / Legal Use
 
 Use this code only for websites and APIs you are authorized to access, and always comply with applicable terms of service and laws.
