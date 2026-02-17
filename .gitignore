@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+
+# Local runtime config with real endpoints/IDs
+config.yaml
+
+# Generated outputs
+*.xlsx
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

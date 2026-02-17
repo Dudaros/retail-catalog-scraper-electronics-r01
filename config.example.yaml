@@ -1,0 +1,27 @@
+site:
+  brand_name: "DemoRetail"
+  nav_title: "Products"
+  menu_endpoint: "https://content.demo-retail.example.com/content/demo/b2c/us/home.navMenu.json"
+  web_base_url: "https://www.demo-retail.example.com"
+
+api:
+  product_model_template: "https://content.demo-retail.example.com/content/demo/b2c/us/products/{aem_path}.model.json"
+  availability_template: "https://www.demo-retail.example.com/api/inventory/product/availability/{sku_id}?fc_Id=ALL&homeDelivery=true&pickupStoreDelivery=true&expressHomeDelivery=true&expressHomeDeliveryBigBox=true&checkLastPieces=true&qty=1&storeId={store_id}"
+  category_search_template: "https://www.demo-retail.example.com/api/ext/search/store/{store_id}/productview/byCategory/{category_slug}?searchType=1002&searchSource=E&pageNumber={page_number}&pageSize={page_size}&responseFormat=json&catalogId={catalog_id}&p_mode=mixed&currency={currency}&langId={lang_id}&orderBy={order_by}"
+  store_id: "99999"
+  catalog_id: "88888"
+  currency: "USD"
+  lang_id: "-1"
+  order_by: "10"
+  page_size: 15
+
+io:
+  menu_excel_filename: "category_menu.xlsx"
+  menu_sheet_name: "Level_3"
+  menu_levels_to_export: 3
+  output_filename_template: "%Y%m%d_{brand_name}.xlsx"
+  crash_save_filename: "final_data_before_exit.xlsx"
+
+runtime:
+  request_retries: 3
+  request_timeout: 5
