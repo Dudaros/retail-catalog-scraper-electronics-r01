@@ -1,47 +1,34 @@
 # Retail Catalog Scraper Pipeline
 
-Config-driven, two-stage scraping pipeline for e-commerce catalog data.
+## What This Project Does
 
-This portfolio project is intentionally retailer-neutral:
-- No hardcoded store names
-- No hardcoded store IDs or endpoint domains
-- All environment-specific values come from `config.yaml`
+This project is a two-stage Python pipeline for collecting product catalog data from an e-commerce source.
 
-## What It Does
+1. `menu_extractor.py`
+- Fetches the navigation/menu JSON.
+- Flattens nested categories into structured levels.
+- Exports category data to an Excel file.
 
-1. `menu_extractor.py` (Stage 1)
-- Downloads navigation/menu JSON from a configured endpoint.
-- Recursively flattens category hierarchy (levels + parent relationships).
-- Exports categories to Excel with level-based sheets.
-
-2. `product_catalog_scraper.py` (Stage 2)
-- Reads the category Excel file from Stage 1.
+2. `product_catalog_scraper.py`
+- Reads the category Excel file from stage 1.
 - Scrapes products page-by-page for each category.
-- Fetches availability in parallel using multithreading.
-- Preserves retries, logging, pagination, and crash-safe emergency export.
-- Exports a date-stamped final Excel dataset.
+- Enriches products with availability status using multithreading.
+- Exports a date-stamped Excel dataset.
+
+## Why It Was Built
+
+The goal is to provide a reusable, configuration-driven scraping workflow for catalog analysis and data collection. The code emphasizes unattended execution by using retries, defensive parsing, bounded concurrency, logging, and emergency save-on-failure behavior.
 
 ## Tech Stack
 
 - Python 3.10+
-- `requests`
-- `pandas`
-- `openpyxl`
-- `PyYAML`
+- requests
+- pandas
+- openpyxl
+- PyYAML
+- pytest
 
-## Project Structure
-
-```text
-.
-├── menu_extractor.py
-├── product_catalog_scraper.py
-├── config.example.yaml
-├── config.yaml              # local only (ignored by git)
-├── requirements.txt
-└── README.md
-```
-
-## Setup
+## Installation
 
 ```bash
 python3 -m venv .venv
@@ -50,69 +37,41 @@ pip install -r requirements.txt
 cp config.example.yaml config.yaml
 ```
 
-Then edit `config.yaml` with your own endpoints, IDs, and output preferences.
-
-## Run
+## How To Run
 
 ```bash
 python menu_extractor.py
 python product_catalog_scraper.py
 ```
 
-## Configuration Notes
+## Configuration (`config.yaml`)
 
-- `site.*`: brand label, web base URL, menu source endpoint.
-- `api.*`: URL templates + IDs/params for model, search, availability endpoints.
-- `io.*`: input/output Excel names and output filename pattern.
-- `runtime.*`: retries and request timeout.
+The pipeline reads all source-specific settings from `config.yaml`.
 
-## Portfolio Notes
+### `site`
+- `brand_name`: Label used in output filename template.
+- `nav_title`: Navigation section title to extract.
+- `menu_endpoint`: URL for menu/navigation JSON.
+- `web_base_url`: Base web URL used to build product links.
 
-This repo demonstrates:
-- Multi-stage data pipeline design
-- Externalized configuration for portability/security
-- Reliable scraping patterns (retry + timeout + pagination)
-- Concurrent enrichment for performance
-- Defensive data persistence on failure
+### `api`
+- `product_model_template`: URL template for category metadata (`{aem_path}`).
+- `availability_template`: URL template for SKU availability (`{sku_id}`, `{store_id}`).
+- `category_search_template`: URL template for paginated category products (`{store_id}`, `{category_slug}`, `{page_number}`, `{page_size}`, `{catalog_id}`, `{currency}`, `{lang_id}`, `{order_by}`).
+- `store_id`: Store identifier for API requests.
+- `catalog_id`: Catalog identifier.
+- `currency`: Currency code.
+- `lang_id`: Language identifier.
+- `order_by`: Sort mode for category API.
+- `page_size`: Number of products per page.
 
-## Naming Strategy For Multiple Scrapers
+### `io`
+- `menu_excel_filename`: Output file from stage 1 and input file for stage 2.
+- `menu_sheet_name`: Sheet name stage 2 reads (typically `Level_3`).
+- `menu_levels_to_export`: Number of category levels to export.
+- `output_filename_template`: Final output naming pattern (supports `%Y%m%d` and `{brand_name}`).
+- `crash_save_filename`: Emergency output file used on unexpected failure.
 
-Use a neutral public naming template and keep the real store mapping private.
-
-Public repo template:
-- `retail-catalog-scraper-<segment>-<alias>`
-
-Examples:
-- `retail-catalog-scraper-electronics-r01`
-- `retail-catalog-scraper-supermarket-r02`
-- `retail-catalog-scraper-fashion-r03`
-- `retail-catalog-scraper-home-r04`
-- `retail-catalog-scraper-pharmacy-r05`
-
-Private mapping idea (not in GitHub):
-- `r01 -> <real store A>`
-- `r02 -> <real store B>`
-- `r03 -> <real store C>`
-- `r04 -> <real store D>`
-- `r05 -> <real store E>`
-
-## Ethical / Legal Use
-
-Use this code only for websites and APIs you are authorized to access, and always comply with applicable terms of service and laws.
-
-## Publish To GitHub
-
-```bash
-cd /Users/chatzigrigorioug.a/Developer/my-projects/retail-catalog-scraper-portfolio
-git init
-git add .
-git commit -m "Initial portfolio version: retail catalog scraper pipeline"
-
-# Option A: using GitHub CLI (if logged in)
-gh repo create retail-catalog-scraper-pipeline --public --source . --remote origin --push
-
-# Option B: manual remote URL
-# git remote add origin <YOUR_REPO_URL>
-# git branch -M main
-# git push -u origin main
-```
+### `runtime`
+- `request_retries`: Number of retries per API request.
+- `request_timeout`: Request timeout in seconds.
