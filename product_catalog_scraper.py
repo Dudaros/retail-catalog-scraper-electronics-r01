@@ -50,7 +50,7 @@ def fetch_json_data(url, retries=None, timeout=None):
             response = requests.get(url, timeout=timeout)
             response.raise_for_status()
             return response.json()
-        except requests.RequestException as e:
+        except (requests.RequestException, ValueError) as e:
             logging.warning(f"Error fetching {url}: {e}")
             time.sleep(1)
     return None
@@ -107,16 +107,38 @@ def fetch_availability_statuses(single_sku_ids):
     Returns:
         dict: A dictionary mapping SKU IDs to their availability statuses.
     """
+    unique_sku_ids = []
+    seen_sku_ids = set()
+    for sku_id in single_sku_ids:
+        if sku_id is None or (isinstance(sku_id, float) and pd.isna(sku_id)):
+            continue
+        if sku_id in seen_sku_ids:
+            continue
+        seen_sku_ids.add(sku_id)
+        unique_sku_ids.append(sku_id)
+
+    if not unique_sku_ids:
+        return {}
+
     statuses = {}
-    with ThreadPoolExecutor() as executor:
-        future_to_sku = {executor.submit(fetch_single_availability, sku_id): sku_id for sku_id in single_sku_ids}
-        completed = 0
-        for future in concurrent.futures.as_completed(future_to_sku):
-            sku = future_to_sku[future]
-            statuses[sku] = future.result()
-            completed += 1
-            if completed % 10 == 0:
-                logging.info(f"Completed fetching availability for {completed}/{len(single_sku_ids)} SKU IDs.")
+    max_workers = 12
+    batch_size = 200
+    completed = 0
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for batch_start in range(0, len(unique_sku_ids), batch_size):
+            batch_sku_ids = unique_sku_ids[batch_start:batch_start + batch_size]
+            future_to_sku = {executor.submit(fetch_single_availability, sku_id): sku_id for sku_id in batch_sku_ids}
+            for future in concurrent.futures.as_completed(future_to_sku):
+                sku = future_to_sku[future]
+                try:
+                    statuses[sku] = future.result()
+                except Exception as e:
+                    logging.warning(f"Availability fetch failed for SKU ID {sku}: {e}")
+                    statuses[sku] = "N/A"
+                completed += 1
+                if completed % 10 == 0:
+                    logging.info(f"Completed fetching availability for {completed}/{len(unique_sku_ids)} SKU IDs.")
     return statuses
 
 
@@ -147,7 +169,15 @@ def main(limit=None):
             if limit is not None and product_count >= limit:
                 break
 
-            aem_url_parts = row.AEM_URL.split("/")[-3:]
+            aem_url = getattr(row, "AEM_URL", None)
+            if not isinstance(aem_url, str) or not aem_url.strip():
+                logging.warning(f"Skipping row {index + 1}/{total_rows}: missing AEM_URL")
+                continue
+            aem_url_parts = [part for part in aem_url.split("/") if part][-3:]
+            if not aem_url_parts:
+                logging.warning(f"Skipping row {index + 1}/{total_rows}: invalid AEM_URL '{aem_url}'")
+                continue
+
             additional_info = fetch_additional_info(aem_url_parts)
 
             logging.info(f"Collecting product info {index + 1}/{total_rows}")
@@ -159,6 +189,8 @@ def main(limit=None):
             }
 
             page_number = 1
+            consecutive_page_failures = 0
+            max_consecutive_page_failures = 3
             while True:
                 if limit is not None and product_count >= limit:
                     break
@@ -174,7 +206,22 @@ def main(limit=None):
                     order_by=API_CONFIG["order_by"],
                 )
                 data = fetch_json_data(specific_url)
-                if data is None or not data.get("catalogEntryView", []):
+                if data is None:
+                    consecutive_page_failures += 1
+                    logging.warning(
+                        f"Failed to fetch category page {page_number} for '{aem_url_parts[-1]}' "
+                        f"({consecutive_page_failures}/{max_consecutive_page_failures})"
+                    )
+                    if consecutive_page_failures >= max_consecutive_page_failures:
+                        logging.error(
+                            f"Stopping category '{aem_url_parts[-1]}' after repeated page fetch failures."
+                        )
+                        break
+                    page_number += 1
+                    continue
+
+                consecutive_page_failures = 0
+                if not data.get("catalogEntryView", []):
                     break
 
                 for product in data["catalogEntryView"]:
@@ -197,9 +244,16 @@ def main(limit=None):
                     for i, level_key in enumerate(level_keys):
                         product_info[level_key] = category_levels[i] if i < len(category_levels) else None
 
-                    user_data = product.get("UserData", [{}])
-                    seo_url = user_data[0].get("seo_url", "N/A")
-                    product_info["Link"] = f"{SITE_CONFIG['web_base_url'].rstrip('/')}/{seo_url.lstrip('/')}"
+                    user_data = product.get("UserData")
+                    user_data_first = user_data[0] if isinstance(user_data, list) and user_data else {}
+                    if not isinstance(user_data_first, dict):
+                        user_data_first = {}
+
+                    seo_url = user_data_first.get("seo_url", "N/A")
+                    if isinstance(seo_url, str):
+                        product_info["Link"] = f"{SITE_CONFIG['web_base_url'].rstrip('/')}/{seo_url.lstrip('/')}"
+                    else:
+                        product_info["Link"] = "N/A"
 
                     # Extracting price information
                     prices = product.get("price", [])
@@ -213,7 +267,9 @@ def main(limit=None):
                     product_info["Original_Price"] = original_price
                     product_info["Current_Price"] = current_price
 
-                    single_sku_ids.append(product.get("singleSKUCatalogEntryID", None))
+                    sku_id = product.get("singleSKUCatalogEntryID", None)
+                    if sku_id is not None:
+                        single_sku_ids.append(sku_id)
 
                     all_data.append(product_info)
                     product_count += 1
